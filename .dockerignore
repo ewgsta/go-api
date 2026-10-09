@@ -1,0 +1,27 @@
+# Keep the build context small and prevent host artifacts from leaking in.
+.git
+.github
+.gitignore
+.env
+.env.*
+!.env.example
+
+bin/
+dist/
+coverage.out
+*.out
+*.test
+
+# Docs and tooling metadata are not needed to build the binary.
+README.md
+LICENSE
+Makefile
+.golangci.yml
+Dockerfile
+.dockerignore
+
+# Editor and OS files
+.idea/
+.vscode/
+*.swp
+.DS_Store
