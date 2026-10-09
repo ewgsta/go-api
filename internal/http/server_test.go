@@ -23,9 +23,9 @@ func testServerOptions() ServerOptions {
 	}
 }
 
-// startServer binds a server on an ephemeral port and serves in the background.
-// The returned cleanup shuts the server down.
-func startServer(t *testing.T, handler http.Handler) (*Server, func()) {
+// startServer binds a server on an ephemeral port, serves in the background,
+// and shuts it down when the test finishes.
+func startServer(t *testing.T, handler http.Handler) *Server {
 	t.Helper()
 
 	var buf bytes.Buffer
@@ -51,7 +51,7 @@ func startServer(t *testing.T, handler http.Handler) (*Server, func()) {
 	}
 
 	t.Cleanup(cleanup)
-	return server, cleanup
+	return server
 }
 
 func TestServerServesRequests(t *testing.T) {
@@ -59,7 +59,7 @@ func TestServerServesRequests(t *testing.T) {
 
 	var buf bytes.Buffer
 	router := NewRouter(testLogger(&buf))
-	server, _ := startServer(t, router)
+	server := startServer(t, router)
 
 	resp, err := http.Get("http://" + server.Addr() + "/healthz") //nolint:noctx // short-lived test request
 	if err != nil {

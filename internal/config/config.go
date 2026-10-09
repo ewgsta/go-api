@@ -76,7 +76,15 @@ func loadFrom(lookup func(string) (string, bool)) (Config, error) {
 		err error
 	)
 
-	cfg.Environment = stringOr(lookup, "APP_ENV", DefaultEnvironment)
+	// APP_ENV follows the same rule as the other variables: an explicitly set
+	// but empty value is a configuration mistake, not a request for defaults.
+	env, ok := lookup("APP_ENV")
+	if !ok {
+		cfg.Environment = DefaultEnvironment
+	} else if cfg.Environment = strings.TrimSpace(env); cfg.Environment == "" {
+		return Config{}, fmt.Errorf("APP_ENV: must not be empty")
+	}
+
 	switch cfg.Environment {
 	case EnvDevelopment, EnvStaging, EnvProduction:
 	default:
@@ -196,13 +204,4 @@ func logLevel(lookup func(string) (string, bool)) (slog.Level, error) {
 	}
 
 	return level, nil
-}
-
-func stringOr(lookup func(string) (string, bool), key, fallback string) string {
-	if raw, ok := lookup(key); ok {
-		if trimmed := strings.TrimSpace(raw); trimmed != "" {
-			return trimmed
-		}
-	}
-	return fallback
 }

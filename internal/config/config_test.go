@@ -101,6 +101,7 @@ func TestLoadFromInvalidValues(t *testing.T) {
 		wantErr string
 	}{
 		{"unknown app env", map[string]string{"APP_ENV": "prod"}, "APP_ENV"},
+		{"empty app env", map[string]string{"APP_ENV": "   "}, "APP_ENV: must not be empty"},
 		{"empty addr", map[string]string{"HTTP_ADDR": "  "}, "HTTP_ADDR: must not be empty"},
 		{"addr without port", map[string]string{"HTTP_ADDR": "localhost"}, "HTTP_ADDR"},
 		{"addr with invalid host", map[string]string{"HTTP_ADDR": "local host:8080"}, "HTTP_ADDR"},
