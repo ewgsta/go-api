@@ -204,6 +204,32 @@ func TestRecoverRethrowsErrAbortHandler(t *testing.T) {
 	handler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/", nil))
 }
 
+// TestFormatPanicTreatsValueAsData verifies that a panic value is rendered as
+// data, so hostile content cannot inject log format directives.
+func TestFormatPanicTreatsValueAsData(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+	handler := Recover(newTestLogger(&buf), jsonResponder)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		panic("%s %s leaked secret")
+	}))
+
+	handler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/", nil))
+
+	logged := buf.String()
+	if !strings.Contains(logged, "%!s(MISSING)") && !strings.Contains(logged, "leaked secret") {
+		t.Errorf("logs do not contain the panic value as data: %s", logged)
+	}
+
+	var record map[string]any
+	if err := json.Unmarshal([]byte(strings.TrimSpace(logged)), &record); err != nil {
+		t.Fatalf("log line is not JSON: %v", err)
+	}
+	if _, ok := record["stack"]; !ok {
+		t.Error("stack attribute missing")
+	}
+}
+
 func TestFormatPanic(t *testing.T) {
 	t.Parallel()
 
@@ -214,8 +240,8 @@ func TestFormatPanic(t *testing.T) {
 	}{
 		{"error", errors.New("db down"), "db down"},
 		{"string", "plain", "plain"},
-		{"int", 42, "non-string panic value"},
-		{"struct", struct{ A int }{1}, "non-string panic value"},
+		{"int", 42, "42"},
+		{"struct", struct{ A int }{1}, "{1}"},
 	}
 
 	for _, tt := range tests {

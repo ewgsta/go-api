@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"fmt"
 	"log/slog"
 	"net/http"
 	"runtime/debug"
@@ -62,16 +63,13 @@ func Recover(logger *slog.Logger, respond errorResponder) func(http.Handler) htt
 	}
 }
 
-// formatPanic renders a panic value for logging. It is only used as an slog
-// attribute value, never as a format string, so untrusted content cannot act
-// as a formatting directive.
+// formatPanic renders a panic value for logging. The value is passed as an
+// argument to %v rather than used as a format string, so untrusted content
+// cannot introduce formatting verbs, and the result is a single slog value
+// rather than a message template.
 func formatPanic(value any) string {
-	switch v := value.(type) {
-	case error:
-		return v.Error()
-	case string:
-		return v
-	default:
-		return "non-string panic value"
+	if err, ok := value.(error); ok {
+		return err.Error()
 	}
+	return fmt.Sprintf("%v", value)
 }
