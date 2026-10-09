@@ -1,5 +1,3 @@
-# go-api-starter
-
 A minimal, production-minded Go HTTP API starter template. Clone it, set
 environment variables, and you have a running service with structured logging,
 request ID propagation, a consistent JSON contract, graceful shutdown, tests,
