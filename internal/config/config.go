@@ -6,7 +6,9 @@ package config
 import (
 	"fmt"
 	"log/slog"
+	"net"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -119,32 +121,44 @@ func addr(lookup func(string) (string, bool)) (string, error) {
 	}
 
 	value := strings.TrimSpace(raw)
-	host, port, err := splitHostPort(value)
+	host, port, err := net.SplitHostPort(value)
 	if err != nil {
-		return "", fmt.Errorf("HTTP_ADDR: invalid value %q: %w", raw, err)
+		return "", fmt.Errorf("HTTP_ADDR: invalid value %q: expected a value like \":8080\" or \"127.0.0.1:8080\"", raw)
 	}
-	if port == "" {
-		return "", fmt.Errorf("HTTP_ADDR: missing port in %q: expected a value like \":8080\"", raw)
+	if host != "" {
+		if net.ParseIP(host) == nil && !isHostname(host) {
+			return "", fmt.Errorf("HTTP_ADDR: invalid host %q", host)
+		}
 	}
-	if strings.ContainsAny(host, " \t") {
-		return "", fmt.Errorf("HTTP_ADDR: invalid host %q", host)
+
+	number, err := strconv.Atoi(port)
+	if err != nil || number < 0 || number > 65535 {
+		return "", fmt.Errorf("HTTP_ADDR: invalid port %q: expected a number between 0 and 65535", port)
 	}
 
 	return value, nil
 }
 
-// splitHostPort accepts both "host:port" and ":port" without requiring a
-// network lookup, unlike net.SplitHostPort alone on some inputs.
-func splitHostPort(value string) (host, port string, err error) {
-	idx := strings.LastIndex(value, ":")
-	if idx < 0 {
-		return "", "", fmt.Errorf("missing port")
+// isHostname accepts a DNS host label sequence. It rejects values that net.Listen
+// would treat as malformed, such as addresses containing whitespace.
+func isHostname(host string) bool {
+	if host == "" || len(host) > 253 {
+		return false
 	}
-	host, port = value[:idx], value[idx+1:]
-	if strings.HasPrefix(port, ":") {
-		return "", "", fmt.Errorf("invalid port %q", port)
+	for _, label := range strings.Split(host, ".") {
+		if label == "" || len(label) > 63 {
+			return false
+		}
+		for i, r := range label {
+			switch {
+			case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
+			case r == '-' && i > 0 && i < len(label)-1:
+			default:
+				return false
+			}
+		}
 	}
-	return host, port, nil
+	return true
 }
 
 func duration(lookup func(string) (string, bool), key string, fallback time.Duration) (time.Duration, error) {

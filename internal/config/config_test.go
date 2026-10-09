@@ -104,6 +104,9 @@ func TestLoadFromInvalidValues(t *testing.T) {
 		{"empty addr", map[string]string{"HTTP_ADDR": "  "}, "HTTP_ADDR: must not be empty"},
 		{"addr without port", map[string]string{"HTTP_ADDR": "localhost"}, "HTTP_ADDR"},
 		{"addr with invalid host", map[string]string{"HTTP_ADDR": "local host:8080"}, "HTTP_ADDR"},
+		{"addr with non-numeric port", map[string]string{"HTTP_ADDR": ":http"}, "HTTP_ADDR"},
+		{"addr with out-of-range port", map[string]string{"HTTP_ADDR": ":70000"}, "HTTP_ADDR"},
+		{"addr with empty port", map[string]string{"HTTP_ADDR": "localhost:"}, "HTTP_ADDR"},
 		{"empty read timeout", map[string]string{"HTTP_READ_TIMEOUT": ""}, "HTTP_READ_TIMEOUT: must not be empty"},
 		{"unparsable read timeout", map[string]string{"HTTP_READ_TIMEOUT": "ten"}, "HTTP_READ_TIMEOUT"},
 		{"unitless read timeout", map[string]string{"HTTP_READ_TIMEOUT": "10"}, "HTTP_READ_TIMEOUT"},
@@ -125,6 +128,34 @@ func TestLoadFromInvalidValues(t *testing.T) {
 			}
 			if !strings.Contains(err.Error(), tt.wantErr) {
 				t.Errorf("loadFrom() error = %q, want it to contain %q", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestLoadFromAcceptsValidAddresses(t *testing.T) {
+	t.Parallel()
+
+	tests := []string{
+		":8080",
+		"0.0.0.0:80",
+		"127.0.0.1:9000",
+		"localhost:3000",
+		"api.internal.example:65535",
+		"[::1]:8080",
+		"[::]:8080",
+	}
+
+	for _, addr := range tests {
+		t.Run(addr, func(t *testing.T) {
+			t.Parallel()
+
+			cfg, err := loadFrom(env(map[string]string{"HTTP_ADDR": addr}))
+			if err != nil {
+				t.Fatalf("loadFrom() error = %v, want nil for %q", err, addr)
+			}
+			if cfg.HTTP.Addr != addr {
+				t.Errorf("Addr = %q, want %q", cfg.HTTP.Addr, addr)
 			}
 		})
 	}
