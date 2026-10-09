@@ -7,11 +7,11 @@ import (
 	"runtime/debug"
 )
 
-// errorResponder is the subset of the response layer that the recovery
-// middleware needs. Depending on a function keeps this package free of an
-// import cycle with the response helpers and keeps recovery testable on its
-// own.
-type errorResponder func(w http.ResponseWriter, r *http.Request, status int, code, message string)
+// ErrorResponder writes a minimal error response. It is the subset of the
+// response layer that the recovery middleware needs: depending on a function
+// keeps this package free of an import cycle with the response helpers and
+// keeps recovery testable on its own.
+type ErrorResponder func(w http.ResponseWriter, r *http.Request, status int, code, message string)
 
 // Recover converts a panic in the handler chain into a 500 response.
 //
@@ -25,7 +25,7 @@ type errorResponder func(w http.ResponseWriter, r *http.Request, status int, cod
 //     retract bytes already sent.
 //   - The panic is not re-raised, so the process keeps serving traffic. Use the
 //     crash log for alerting.
-func Recover(logger *slog.Logger, respond errorResponder) func(http.Handler) http.Handler {
+func Recover(logger *slog.Logger, respond ErrorResponder) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			recorder := NewLogResponseWriter(w)
