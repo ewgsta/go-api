@@ -1,0 +1,40 @@
+# golangci-lint configuration (v2 schema).
+# Keep this file small on purpose: a starter should enforce a few high-signal
+# checks, not dozens of noisy ones.
+version: "2"
+
+run:
+  timeout: 5m
+  tests: true
+
+formatters:
+  enable:
+    - gofmt
+
+linters:
+  default: standard
+  enable:
+    - bodyclose
+    - errorlint
+    - misspell
+    - revive
+    - unconvert
+
+  settings:
+    revive:
+      rules:
+        - name: exported
+          arguments:
+            - disableStutteringCheck
+
+  exclusions:
+    rules:
+      # Test helpers and small closures do not need doc comments.
+      - path: _test\.go
+        linters:
+          - revive
+        text: "exported .* should have comment"
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
