@@ -13,14 +13,16 @@ import (
 // NewRouter builds the application router with the middleware chain installed.
 // Middleware order is outermost first: request ID, request log, recovery.
 //
-// The ordering matters. Recovery sits innermost so it catches a panic before
-// it unwinds past the request logger, and it writes the 500 through the writer
+// The ordering matters. WithLogger runs early so the response helpers share the
+// configured logger. Recovery sits innermost so it catches a panic before it
+// unwinds past the request logger, and it writes the 500 through the writer
 // that the logger wraps, so the log line carries the final 500 status and the
 // request is logged exactly once.
 func NewRouter(logger *slog.Logger) http.Handler {
 	r := chi.NewRouter()
 
 	r.Use(middleware.RequestID)
+	r.Use(middleware.WithLogger(logger))
 	r.Use(middleware.RequestLogger(logger))
 	r.Use(middleware.Recover(logger, writeInternalError))
 

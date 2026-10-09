@@ -45,7 +45,7 @@ func ErrorResponse(w http.ResponseWriter, r *http.Request, err error) {
 	appErr := asError(err)
 	if appErr.Code == CodeInternalError {
 		// The cause is useful in logs and useless (or harmful) to clients.
-		slog.ErrorContext(r.Context(), "http_error",
+		loggerFrom(r).ErrorContext(r.Context(), "http_error",
 			"error", appErr.Error(),
 			"code", appErr.Code,
 		)
@@ -67,8 +67,8 @@ func writeJSON(w http.ResponseWriter, r *http.Request, status int, envelope any)
 	if err != nil {
 		// Encoding failed: fall back to a hand-built payload. Status and
 		// headers are untouched until now, so a single response is still sent.
-		slog.ErrorContext(r.Context(), "http_encoding_failed", "error", err.Error())
-		body, status = []byte(`{"error":{"code":"INTERNAL_ERROR","message":"internal server error"},"request_id":`+quote(requestID(r))+`}`), http.StatusInternalServerError
+		loggerFrom(r).ErrorContext(r.Context(), "http_encoding_failed", "error", err.Error())
+		body, status = encodingFallback(requestID(r)), http.StatusInternalServerError
 	}
 
 	header := w.Header()
@@ -78,13 +78,20 @@ func writeJSON(w http.ResponseWriter, r *http.Request, status int, envelope any)
 
 	if _, err := w.Write(body); err != nil {
 		// The status line is already sent, so nothing can be corrected here.
-		slog.WarnContext(r.Context(), "http_response_write_failed", "error", err.Error())
+		loggerFrom(r).WarnContext(r.Context(), "http_response_write_failed", "error", err.Error())
 	}
 }
 
-// quote renders s as a JSON string. Request IDs are validated by the
-// middleware, so this only handles the empty case.
-func quote(s string) string {
+// encodingFallback builds the error envelope by hand for the case where the
+// payload cannot be encoded. The request ID is inserted as a JSON string
+// rather than concatenated raw.
+func encodingFallback(requestID string) []byte {
+	return []byte(`{"error":{"code":"INTERNAL_ERROR","message":"internal server error"},"request_id":` +
+		jsonString(requestID) + `}`)
+}
+
+// jsonString renders s as a JSON string.
+func jsonString(s string) string {
 	encoded, err := json.Marshal(s)
 	if err != nil {
 		return `""`
@@ -97,4 +104,13 @@ func requestID(r *http.Request) string {
 		return ""
 	}
 	return middleware.RequestIDFrom(r.Context())
+}
+
+// loggerFrom returns the request's logger, so response-level diagnostics honor
+// the configured level and sink instead of the global default.
+func loggerFrom(r *http.Request) *slog.Logger {
+	if r == nil {
+		return slog.Default()
+	}
+	return middleware.LoggerFrom(r.Context())
 }
