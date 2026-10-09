@@ -45,7 +45,9 @@ type ServerOptions struct {
 }
 
 // Listen binds the configured address without serving traffic. Binding before
-// startup is logged makes an address-in-use failure explicit and immediate.
+// serving is what makes an address-in-use failure explicit and immediate, and
+// it keeps the listener assignment single-threaded: Serve never binds, so no
+// caller can observe a half-initialized server.
 func (s *Server) Listen() error {
 	listener, err := net.Listen("tcp", s.addr)
 	if err != nil {
@@ -56,7 +58,7 @@ func (s *Server) Listen() error {
 }
 
 // Addr returns the bound address. It is useful in tests, where the port is
-// assigned by the kernel.
+// assigned by the kernel. Call it after Listen.
 func (s *Server) Addr() string {
 	if s.listener == nil {
 		return s.addr
@@ -64,14 +66,14 @@ func (s *Server) Addr() string {
 	return s.listener.Addr().String()
 }
 
-// Serve accepts connections until Shutdown is called. It returns nil on a
-// clean shutdown and http.ErrServerClosed otherwise.
+// Serve accepts connections until Shutdown is called. Listen must have been
+// called first. Serve returns nil after a clean shutdown and an error for an
+// unexpected failure, so the caller can decide the process exit status.
 func (s *Server) Serve() error {
 	if s.listener == nil {
-		if err := s.Listen(); err != nil {
-			s.logger.Error("http_server_failed", "error", err.Error())
-			return err
-		}
+		err := errors.New("serve: Listen must be called before Serve")
+		s.logger.Error("http_server_failed", "error", err.Error())
+		return err
 	}
 
 	s.logger.Info("http_server_started",

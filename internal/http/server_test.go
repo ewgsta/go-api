@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
@@ -116,13 +117,11 @@ func TestServerGracefulShutdown(t *testing.T) {
 		_, _ = w.Write([]byte("done"))
 	})
 
-	var srv *Server
 	// Route through the server directly so shutdown timing is observable.
-	server := NewServer("127.0.0.1:0", handler, testLogger(&buf), testServerOptions())
-	if err := server.Listen(); err != nil {
+	srv := NewServer("127.0.0.1:0", handler, testLogger(&buf), testServerOptions())
+	if err := srv.Listen(); err != nil {
 		t.Fatalf("Listen() error = %v", err)
 	}
-	srv = server
 
 	done := make(chan error, 1)
 	go func() {
@@ -282,42 +281,48 @@ func TestServerAddrBeforeListen(t *testing.T) {
 	}
 }
 
-func TestServerServeWithoutListenBinds(t *testing.T) {
+// TestServerServeRequiresListen documents that binding is an explicit step, so
+// Serve never mutates the listener behind a caller's back.
+func TestServerServeRequiresListen(t *testing.T) {
 	t.Parallel()
 
 	var buf bytes.Buffer
 	server := NewServer("127.0.0.1:0", http.NotFoundHandler(), testLogger(&buf), testServerOptions())
 
-	done := make(chan error, 1)
-	go func() {
-		done <- server.Serve()
-	}()
-
-	// Serve binds lazily; wait until the address reports a real port.
-	deadline := time.Now().Add(2 * time.Second)
-	for server.Addr() == "127.0.0.1:0" && time.Now().Before(deadline) {
-		time.Sleep(5 * time.Millisecond)
+	err := server.Serve()
+	if err == nil {
+		t.Fatal("Serve() error = nil, want an error when Listen was not called")
 	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
-	if err := server.Shutdown(ctx); err != nil {
-		t.Fatalf("Shutdown() error = %v", err)
+	if !strings.Contains(err.Error(), "Listen") {
+		t.Errorf("Serve() error = %q, want it to mention Listen", err)
 	}
-	if err := <-done; err != nil {
-		t.Errorf("Serve() error = %v", err)
+	if !strings.Contains(buf.String(), "http_server_failed") {
+		t.Errorf("logs missing failure record: %s", buf.String())
 	}
 }
 
-func TestServerLogsStartupFailure(t *testing.T) {
+func TestServerLogsServeFailure(t *testing.T) {
 	t.Parallel()
 
 	var buf bytes.Buffer
 	logger := slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
-	server := NewServer("127.0.0.1:70000", http.NotFoundHandler(), logger, testServerOptions())
+	server := NewServer("127.0.0.1:0", http.NotFoundHandler(), logger, testServerOptions())
+	if err := server.Listen(); err != nil {
+		t.Fatalf("Listen() error = %v", err)
+	}
 
-	if err := server.Serve(); err == nil {
-		t.Fatal("Serve() error = nil, want a bind failure")
+	// Closing the listener before Serve makes the accept loop fail, which is
+	// the unexpected-server-failure path.
+	if err := server.listener.Close(); err != nil {
+		t.Fatalf("close listener: %v", err)
+	}
+
+	err := server.Serve()
+	if err == nil {
+		t.Fatal("Serve() error = nil, want an error from the closed listener")
+	}
+	if errors.Is(err, http.ErrServerClosed) {
+		t.Errorf("Serve() error = %v, want a real failure", err)
 	}
 	if !strings.Contains(buf.String(), "http_server_failed") {
 		t.Errorf("logs missing failure record: %s", buf.String())
