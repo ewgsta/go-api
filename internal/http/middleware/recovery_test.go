@@ -193,7 +193,8 @@ func TestRecoverRethrowsErrAbortHandler(t *testing.T) {
 		if recovered == nil {
 			t.Fatal("recover() = nil, want http.ErrAbortHandler re-raised")
 		}
-		if err, ok := recovered.(error); !ok || err != http.ErrAbortHandler {
+		err, ok := recovered.(error)
+		if !ok || !errors.Is(err, http.ErrAbortHandler) {
 			t.Fatalf("recover() = %v, want http.ErrAbortHandler", recovered)
 		}
 		if buf.Len() != 0 {

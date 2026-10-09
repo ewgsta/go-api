@@ -61,27 +61,42 @@ func TestServerServesRequests(t *testing.T) {
 	router := NewRouter(testLogger(&buf))
 	server := startServer(t, router)
 
-	resp, err := http.Get("http://" + server.Addr() + "/healthz") //nolint:noctx // short-lived test request
-	if err != nil {
-		t.Fatalf("GET /healthz error = %v", err)
-	}
-	defer resp.Body.Close()
+	body, status, header := get(t, server, "/healthz")
 
-	if resp.StatusCode != http.StatusOK {
-		t.Errorf("status = %d, want 200", resp.StatusCode)
+	if status != http.StatusOK {
+		t.Errorf("status = %d, want 200", status)
 	}
-	if got := resp.Header.Get("X-Request-ID"); !ValidRequestIDForTest(got) {
+	if got := header.Get("X-Request-ID"); !ValidRequestIDForTest(got) {
 		t.Errorf("X-Request-ID = %q, want a valid id", got)
 	}
 
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		t.Fatalf("read body: %v", err)
-	}
 	var payload map[string]any
 	if err := json.Unmarshal(body, &payload); err != nil {
 		t.Fatalf("body %q is not valid JSON: %v", body, err)
 	}
+}
+
+// get performs a request against a running test server and returns the body,
+// status, and headers. It always closes the response body.
+func get(t *testing.T, server *Server, path string) ([]byte, int, http.Header) {
+	t.Helper()
+
+	//nolint:noctx // short-lived test request
+	resp, err := http.Get("http://" + server.Addr() + path)
+	if err != nil {
+		t.Fatalf("GET %s error = %v", path, err)
+	}
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			t.Errorf("close body: %v", err)
+		}
+	}()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read body of %s: %v", path, err)
+	}
+	return body, resp.StatusCode, resp.Header
 }
 
 func TestServerAppliesTimeouts(t *testing.T) {
@@ -135,14 +150,16 @@ func TestServerGracefulShutdown(t *testing.T) {
 	}
 	results := make(chan result, 1)
 	go func() {
-		resp, err := http.Get("http://" + srv.Addr() + "/slow") //nolint:noctx // short-lived test request
+		//nolint:noctx // short-lived test request
+		resp, err := http.Get("http://" + srv.Addr() + "/slow")
 		if err != nil {
 			results <- result{err: err}
 			return
 		}
-		defer resp.Body.Close()
-		body, _ := io.ReadAll(resp.Body)
-		results <- result{status: resp.StatusCode, body: string(body)}
+		defer func() { _ = resp.Body.Close() }()
+
+		body, err := io.ReadAll(resp.Body)
+		results <- result{status: resp.StatusCode, body: string(body), err: err}
 	}()
 
 	// Give the request time to reach the handler, then shut down while it is
@@ -192,7 +209,11 @@ func TestServerShutdownBoundedByContext(t *testing.T) {
 
 	go func() {
 		//nolint:noctx // short-lived test request
-		_, _ = http.Get("http://" + server.Addr() + "/block")
+		resp, err := http.Get("http://" + server.Addr() + "/block")
+		if err != nil {
+			return
+		}
+		_ = resp.Body.Close()
 	}()
 
 	time.Sleep(50 * time.Millisecond)
