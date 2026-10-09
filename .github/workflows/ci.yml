@@ -27,7 +27,9 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version-file: go.mod
+          # Pinned explicitly. go.mod carries the same version in its toolchain
+          # directive; keep the two in sync when upgrading Go.
+          go-version: "1.27.2"
           check-latest: false
           cache: true
 

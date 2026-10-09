@@ -11,12 +11,11 @@ RUN go mod download
 
 COPY . .
 
-# CGO is disabled so the result is a static binary that runs on a scratch-like
-# base without a libc dependency.
-ARG VERSION=dev
+# CGO is disabled so the result is a static binary that runs on an Alpine base
+# without a libc dependency. -trimpath keeps host paths out of the binary.
 RUN CGO_ENABLED=0 GOOS=linux go build \
     -trimpath \
-    -ldflags "-s -w -X main.version=${VERSION}" \
+    -ldflags "-s -w" \
     -o /out/api ./cmd/api
 
 # Runtime stage: the binary, a CA bundle, and a non-root user. Nothing else.
