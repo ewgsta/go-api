@@ -31,7 +31,7 @@ type errorEnvelope struct {
 }
 
 // JSON writes data as the "data" field of the success envelope with the given
-// status code. It does not overwrite an already written response.
+// status code. It is the only way a handler should write a response body.
 func JSON(w http.ResponseWriter, r *http.Request, status int, data any) {
 	writeJSON(w, r, status, successEnvelope{
 		Data:      data,
